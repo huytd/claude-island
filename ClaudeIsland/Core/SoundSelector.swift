@@ -19,7 +19,7 @@ class SoundSelector: ObservableObject {
     // MARK: - Constants
 
     /// Maximum number of sound options to show before scrolling
-    private let maxVisibleOptions = 6
+    private let maxVisibleOptions = 5
 
     /// Height per sound option row
     private let rowHeight: CGFloat = 32
@@ -34,5 +34,10 @@ class SoundSelector: ObservableObject {
         let totalOptions = NotificationSound.allCases.count
         let visibleOptions = min(totalOptions, maxVisibleOptions)
         return CGFloat(visibleOptions) * rowHeight + 8 // +8 for padding
+    }
+
+    /// Visible count for picker
+    var visibleOptionCount: Int {
+        min(NotificationSound.allCases.count, maxVisibleOptions)
     }
 }

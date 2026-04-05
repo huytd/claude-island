@@ -7,27 +7,24 @@
 
 import Foundation
 
-/// Available notification sounds
+/// Available notification sounds — 8-bit game-style sounds
 enum NotificationSound: String, CaseIterable {
     case none = "None"
-    case pop = "Pop"
-    case ping = "Ping"
-    case tink = "Tink"
-    case glass = "Glass"
-    case blow = "Blow"
-    case bottle = "Bottle"
-    case frog = "Frog"
-    case funk = "Funk"
-    case hero = "Hero"
-    case morse = "Morse"
-    case purr = "Purr"
-    case sosumi = "Sosumi"
-    case submarine = "Submarine"
-    case basso = "Basso"
+    case coin = "Coin"
+    case blip = "Blip"
+    case jump = "Jump"
+    case powerUp = "Power Up"
+    case menuOpen = "Menu Open"
 
-    /// The system sound name to use with NSSound, or nil for no sound
-    var soundName: String? {
-        self == .none ? nil : rawValue
+    var bitSound: BitSound? {
+        switch self {
+        case .none: return nil
+        case .coin: return .coin
+        case .blip: return .blip
+        case .jump: return .jump
+        case .powerUp: return .powerUp
+        case .menuOpen: return .menuOpen
+        }
     }
 }
 
@@ -47,7 +44,7 @@ enum AppSettings {
         get {
             guard let rawValue = defaults.string(forKey: Keys.notificationSound),
                   let sound = NotificationSound(rawValue: rawValue) else {
-                return .pop // Default to Pop
+                return .coin // Default to Coin
             }
             return sound
         }

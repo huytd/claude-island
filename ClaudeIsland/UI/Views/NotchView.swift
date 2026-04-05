@@ -426,13 +426,13 @@ struct NotchView: View {
 
             // Play notification sound for permission requests if the session is not actively focused
             if let session = pendingApproval,
-               let soundName = AppSettings.notificationSound.soundName,
+               let sound = AppSettings.notificationSound.bitSound,
                let pid = session.pid {
                 Task {
                     let isFocused = await TerminalVisibilityDetector.isSessionFocused(sessionPid: pid)
                     if !isFocused {
                         await MainActor.run {
-                            NSSound(named: soundName)?.play()
+                            SoundGenerator.shared.play(sound)
                         }
                     }
                 }
@@ -466,13 +466,13 @@ struct NotchView: View {
             let newlyWaitingSessions = waitingForInputSessions.filter { newWaitingIds.contains($0.stableId) }
 
             // Play notification sound if the session is not actively focused
-            if let soundName = AppSettings.notificationSound.soundName {
+            if let sound = AppSettings.notificationSound.bitSound {
                 // Check if we should play sound (async check for tmux pane focus)
                 Task {
                     let shouldPlaySound = await shouldPlayNotificationSound(for: newlyWaitingSessions)
                     if shouldPlaySound {
                         await MainActor.run {
-                            NSSound(named: soundName)?.play()
+                            SoundGenerator.shared.play(sound)
                         }
                     }
                 }
