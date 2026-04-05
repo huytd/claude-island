@@ -419,12 +419,24 @@ struct NotchView: View {
         let currentIds = Set(sessions.map { $0.stableId })
         let newPendingIds = currentIds.subtracting(previousPendingIds)
 
-        if !newPendingIds.isEmpty &&
-           viewModel.status == .closed &&
-           !TerminalVisibilityDetector.isTerminalVisibleOnCurrentSpace() {
+        if !newPendingIds.isEmpty && viewModel.status == .closed {
             // Auto-select the first pending session that needs approval
             let pendingApproval = sessions.first(where: \.phase.isWaitingForApproval)
             viewModel.notchOpen(reason: .notification, pendingSession: pendingApproval)
+
+            // Play notification sound for permission requests if the session is not actively focused
+            if let session = pendingApproval,
+               let soundName = AppSettings.notificationSound.soundName,
+               let pid = session.pid {
+                Task {
+                    let isFocused = await TerminalVisibilityDetector.isSessionFocused(sessionPid: pid)
+                    if !isFocused {
+                        await MainActor.run {
+                            NSSound(named: soundName)?.play()
+                        }
+                    }
+                }
+            }
         }
 
         previousPendingIds = currentIds
