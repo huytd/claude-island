@@ -10,12 +10,14 @@ import AVFoundation
 /// Generates and plays retro 8-bit sounds on demand.
 /// Each sound is a square/triangle waveform — the kind of stuff
 /// you'd hear on a Game Boy or NES.
-final class SoundGenerator {
+final class SoundGenerator: NSObject {
     static let shared = SoundGenerator()
 
     private var cachedBuffers: [BitSound: AVAudioPCMBuffer] = [:]
+    private var activePlayers: [AVAudioPlayer] = []
 
-    private init() {
+    private override init() {
+        super.init()
         // Pre-generate all sounds on init
         for sound in BitSound.allCases {
             cachedBuffers[sound] = generateBuffer(for: sound)
@@ -31,6 +33,8 @@ final class SoundGenerator {
         do {
             let player = try AVAudioPlayer(contentsOf: url)
             player.volume = 0.5
+            player.delegate = self
+            activePlayers.append(player)
             player.play()
         } catch {
             print("[SoundGenerator] Failed to play \(sound.rawValue): \(error)")
@@ -77,11 +81,15 @@ final class SoundGenerator {
         return buffer
     }
 
-    /// Power up / coin — cheerful two-note (square wave)
+    /// Coin — cheerful two-tone (square wave, like Mario coin)
     func makeCoinSound() -> AVAudioPCMBuffer {
+        // The classic Mario coin is two distinct notes: E6 then B6
+        // Each note has its own phase, not a continuous sweep
         let sampleRate = 22_050.0
-        let duration = 0.15
-        let frameCount = AVAudioFrameCount(sampleRate * duration)
+        let note1Duration = 0.06   // First note
+        let note2Duration = 0.08   // Second note (slightly longer)
+        let totalDuration = note1Duration + note2Duration
+        let frameCount = AVAudioFrameCount(sampleRate * totalDuration)
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                    sampleRate: sampleRate,
                                    channels: 1, interleaved: true)!
@@ -93,10 +101,20 @@ final class SoundGenerator {
             let t = Double(frame) / sampleRate
             let fraction = Double(frame) / Double(frameCount)
 
-            let freq: Double = fraction < 0.5 ? 1318.5 : 1567.98
-            let sample: Double = sin(2.0 * .pi * freq * t) > 0 ? 0.2 : -0.2
-            let vol = 1.0 - fraction * 0.5
-            data[frame] = Float(sample * vol)
+            var freq: Double
+            var vol: Double
+            if t < note1Duration {
+                freq = 987.77       // B5
+                vol = 0.15
+            } else {
+                freq = 1318.51      // E6
+                let note2Frac = (t - note1Duration) / note2Duration
+                vol = 0.15 * (1.0 - note2Frac * 0.7)
+            }
+
+            // Soft square wave (reduced amplitude so it's less harsh)
+            let sample: Double = sin(2.0 * .pi * freq * t) > 0 ? vol : -vol
+            data[frame] = Float(sample)
         }
 
         return buffer
@@ -307,6 +325,14 @@ final class SoundGenerator {
             print("[SoundGenerator] Failed to write CAF for \(sound.rawValue): \(error)")
             return nil
         }
+    }
+}
+
+// MARK: - AVAudioPlayerDelegate
+
+extension SoundGenerator: AVAudioPlayerDelegate {
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        activePlayers.removeAll { $0 === player }
     }
 }
 
