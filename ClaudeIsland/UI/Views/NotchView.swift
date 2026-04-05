@@ -426,7 +426,7 @@ struct NotchView: View {
 
             // Play notification sound for permission requests if the session is not actively focused
             if let session = pendingApproval,
-               let sound = AppSettings.notificationSound.bitSound,
+               let sound = AppSettings.attentionSound.bitSound,
                let pid = session.pid {
                 Task {
                     let isFocused = await TerminalVisibilityDetector.isSessionFocused(sessionPid: pid)

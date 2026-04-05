@@ -35,6 +35,7 @@ enum AppSettings {
 
     private enum Keys {
         static let notificationSound = "notificationSound"
+        static let attentionSound = "attentionSound"
     }
 
     // MARK: - Notification Sound
@@ -44,12 +45,26 @@ enum AppSettings {
         get {
             guard let rawValue = defaults.string(forKey: Keys.notificationSound),
                   let sound = NotificationSound(rawValue: rawValue) else {
-                return .coin // Default to Coin
+                return .coin
             }
             return sound
         }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.notificationSound)
+        }
+    }
+
+    /// The sound to play when Claude needs attention (permission request / waiting for approval)
+    static var attentionSound: NotificationSound {
+        get {
+            guard let rawValue = defaults.string(forKey: Keys.attentionSound),
+                  let sound = NotificationSound(rawValue: rawValue) else {
+                return .jump
+            }
+            return sound
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.attentionSound)
         }
     }
 }

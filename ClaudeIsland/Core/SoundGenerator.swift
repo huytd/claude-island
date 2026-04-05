@@ -205,11 +205,13 @@ final class SoundGenerator: NSObject {
         return buffer
     }
 
-    /// Jump — quick ascending sweep (square wave)
+    /// Jump — cheerful two-tone (square wave, coin-like but different notes)
     func makeJumpSound() -> AVAudioPCMBuffer {
         let sampleRate = 22_050.0
-        let duration = 0.15
-        let frameCount = AVAudioFrameCount(sampleRate * duration)
+        let note1Duration = 0.06
+        let note2Duration = 0.08
+        let totalDuration = note1Duration + note2Duration
+        let frameCount = AVAudioFrameCount(sampleRate * totalDuration)
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                    sampleRate: sampleRate,
                                    channels: 1, interleaved: true)!
@@ -218,12 +220,22 @@ final class SoundGenerator: NSObject {
 
         let data = buffer.floatChannelData![0]
         for frame in 0..<Int(frameCount) {
+            let t = Double(frame) / sampleRate
             let fraction = Double(frame) / Double(frameCount)
-            let _ = 300.0 + 600.0 * fraction
-            let phase = 2.0 * .pi * (300.0 + 300.0 * fraction) * fraction * duration
-            let sample: Double = sin(phase) > 0 ? 0.15 : -0.15
-            let vol = 1.0 - fraction
-            data[frame] = Float(sample * vol)
+
+            var freq: Double
+            var vol: Double
+            if t < note1Duration {
+                freq = 1174.66      // D6
+                vol = 0.15
+            } else {
+                freq = 1567.98      // G6
+                let note2Frac = (t - note1Duration) / note2Duration
+                vol = 0.15 * (1.0 - note2Frac * 0.7)
+            }
+
+            let sample: Double = sin(2.0 * .pi * freq * t) > 0 ? vol : -vol
+            data[frame] = Float(sample)
         }
 
         return buffer

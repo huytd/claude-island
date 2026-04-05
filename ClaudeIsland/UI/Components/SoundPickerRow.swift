@@ -6,47 +6,89 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
-struct SoundPickerRow: View {
-    @ObservedObject var soundSelector: SoundSelector
-    @State private var isHovered = false
-    @State private var selectedSound: NotificationSound = AppSettings.notificationSound
+// MARK: - Root View (two rows)
 
-    private var isExpanded: Bool {
-        soundSelector.isPickerExpanded
-    }
-
-    private func setExpanded(_ value: Bool) {
-        soundSelector.isPickerExpanded = value
-    }
+struct SoundPickerRows: View {
+    @StateObject private var completionSelector = PickerState()
+    @StateObject private var attentionSelector = PickerState()
 
     var body: some View {
         VStack(spacing: 0) {
-            // Main row - shows current selection
+            SoundPickerSection(
+                title: "Task Complete Sound",
+                icon: "checkmark.circle",
+                state: completionSelector,
+                soundKey: .completion
+            )
+
+            // Separator
+            Rectangle()
+                .fill(Color.white.opacity(0.05))
+                .frame(height: 1)
+                .padding(.vertical, 4)
+
+            SoundPickerSection(
+                title: "Needs Attention Sound",
+                icon: "exclamationmark.circle",
+                state: attentionSelector,
+                soundKey: .attention
+            )
+        }
+    }
+}
+
+// MARK: - Sound Key
+
+enum SoundKey {
+    case completion
+    case attention
+}
+
+// MARK: - Picker State (per-section)
+
+private final class PickerState: ObservableObject {
+    @Published var isExpanded: Bool = false
+}
+
+// MARK: - Sound Picker Section
+
+private struct SoundPickerSection: View {
+    let title: String
+    let icon: String
+    @StateObject var state: PickerState
+    let soundKey: SoundKey
+
+    @State private var currentSound: NotificationSound = .none
+    @State private var isHovered = false
+
+    var body: some View {
+        VStack(spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    setExpanded(!isExpanded)
+                    state.isExpanded.toggle()
                 }
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "speaker.wave.2")
+                    Image(systemName: icon)
                         .font(.system(size: 12))
                         .foregroundColor(textColor)
                         .frame(width: 16)
 
-                    Text("Notification Sound")
+                    Text(title)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(textColor)
 
                     Spacer()
 
-                    Text(selectedSound.rawValue)
+                    Text(currentSound.rawValue)
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.4))
                         .lineLimit(1)
 
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: state.isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10))
                         .foregroundColor(.white.opacity(0.4))
                 }
@@ -60,20 +102,19 @@ struct SoundPickerRow: View {
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
 
-            // Expanded sound list
-            if isExpanded {
+            if state.isExpanded {
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(NotificationSound.allCases, id: \.self) { sound in
+                        ForEach(NotificationSound.allCases, id: \.self) { option in
                             SoundOptionRowInline(
-                                sound: sound,
-                                isSelected: selectedSound == sound
+                                sound: option,
+                                isSelected: currentSound == option
                             ) {
-                                if let bitSound = sound.bitSound {
+                                if let bitSound = option.bitSound {
                                     SoundGenerator.shared.play(bitSound)
                                 }
-                                selectedSound = sound
-                                AppSettings.notificationSound = sound
+                                currentSound = option
+                                save(option)
                             }
                         }
                     }
@@ -84,7 +125,21 @@ struct SoundPickerRow: View {
             }
         }
         .onAppear {
-            selectedSound = AppSettings.notificationSound
+            currentSound = load()
+        }
+    }
+
+    private func load() -> NotificationSound {
+        switch soundKey {
+        case .completion: return AppSettings.notificationSound
+        case .attention: return AppSettings.attentionSound
+        }
+    }
+
+    private func save(_ sound: NotificationSound) {
+        switch soundKey {
+        case .completion: AppSettings.notificationSound = sound
+        case .attention: AppSettings.attentionSound = sound
         }
     }
 
