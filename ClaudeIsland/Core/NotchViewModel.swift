@@ -227,13 +227,21 @@ class NotchViewModel: ObservableObject {
 
     // MARK: - Actions
 
-    func notchOpen(reason: NotchOpenReason = .unknown) {
+    func notchOpen(reason: NotchOpenReason = .unknown, pendingSession: SessionState? = nil) {
         openReason = reason
         status = .opened
 
         // Don't restore chat on notification - show instances list instead
+        // Unless a specific session is provided (auto-open to permission chat)
         if reason == .notification {
             currentChatSession = nil
+            if let pending = pendingSession {
+                // Avoid unnecessary updates if already showing this chat
+                if case .chat(let current) = contentType, current.sessionId == pending.sessionId {
+                    return
+                }
+                contentType = .chat(pending)
+            }
             return
         }
 

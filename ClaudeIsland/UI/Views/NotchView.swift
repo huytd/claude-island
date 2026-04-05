@@ -422,7 +422,9 @@ struct NotchView: View {
         if !newPendingIds.isEmpty &&
            viewModel.status == .closed &&
            !TerminalVisibilityDetector.isTerminalVisibleOnCurrentSpace() {
-            viewModel.notchOpen(reason: .notification)
+            // Auto-select the first pending session that needs approval
+            let pendingApproval = sessions.first(where: \.phase.isWaitingForApproval)
+            viewModel.notchOpen(reason: .notification, pendingSession: pendingApproval)
         }
 
         previousPendingIds = currentIds
