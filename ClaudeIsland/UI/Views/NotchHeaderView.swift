@@ -84,6 +84,7 @@ struct ClaudeCrabIcon: View {
             context.fill(rightEye, with: .color(.black))
         }
         .frame(width: size * (66.0 / 52.0), height: size)
+        .shadow(color: animateLegs ? color.opacity(0.8) : .clear, radius: 4, x: 0, y: 0)
         .onReceive(legTimer) { _ in
             if animateLegs {
                 legPhase = (legPhase + 1) % 4
