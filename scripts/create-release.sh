@@ -1,5 +1,5 @@
 #!/bin/bash
-# Create a release: notarize, create DMG, sign for Sparkle, upload to GitHub, update website
+# Create a release: notarize, create DMG, upload to GitHub, update website
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,7 +7,6 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 EXPORT_PATH="$BUILD_DIR/export"
 RELEASE_DIR="$PROJECT_DIR/releases"
-KEYS_DIR="$PROJECT_DIR/.sparkle-keys"
 
 # GitHub repository (owner/repo format)
 GITHUB_REPO="farouqaldori/claude-island"
@@ -135,73 +134,9 @@ if [ -z "$SKIP_NOTARIZATION" ]; then
 fi
 
 # ============================================
-# Step 4: Sign for Sparkle and generate appcast
+# Step 4: Create GitHub Release
 # ============================================
-echo "=== Step 4: Signing for Sparkle ==="
-
-# Find Sparkle tools
-SPARKLE_SIGN=""
-GENERATE_APPCAST=""
-
-POSSIBLE_PATHS=(
-    "$HOME/Library/Developer/Xcode/DerivedData/ClaudeIsland-*/SourcePackages/artifacts/sparkle/Sparkle/bin"
-)
-
-for path_pattern in "${POSSIBLE_PATHS[@]}"; do
-    for path in $path_pattern; do
-        if [ -x "$path/sign_update" ]; then
-            SPARKLE_SIGN="$path/sign_update"
-            GENERATE_APPCAST="$path/generate_appcast"
-            break 2
-        fi
-    done
-done
-
-if [ -z "$SPARKLE_SIGN" ]; then
-    echo "WARNING: Could not find Sparkle tools."
-    echo "Build the project in Xcode first to download Sparkle package."
-    echo ""
-    echo "Skipping Sparkle signing. You'll need to manually:"
-    echo "1. Sign the DMG with sign_update"
-    echo "2. Generate appcast with generate_appcast"
-else
-    # Check for private key
-    if [ ! -f "$KEYS_DIR/eddsa_private_key" ]; then
-        echo "WARNING: No private key found at $KEYS_DIR/eddsa_private_key"
-        echo "Run ./scripts/generate-keys.sh first"
-        echo ""
-        echo "Skipping Sparkle signing."
-    else
-        # Generate signature
-        echo "Signing DMG for Sparkle..."
-        SIGNATURE=$("$SPARKLE_SIGN" --ed-key-file "$KEYS_DIR/eddsa_private_key" "$DMG_PATH")
-
-        echo ""
-        echo "Sparkle signature:"
-        echo "$SIGNATURE"
-        echo ""
-
-        # Generate/update appcast
-        echo "Generating appcast..."
-        APPCAST_DIR="$RELEASE_DIR/appcast"
-        mkdir -p "$APPCAST_DIR"
-
-        # Copy DMG to appcast directory
-        cp "$DMG_PATH" "$APPCAST_DIR/"
-
-        # Generate appcast.xml
-        "$GENERATE_APPCAST" --ed-key-file "$KEYS_DIR/eddsa_private_key" "$APPCAST_DIR"
-
-        echo "Appcast generated at: $APPCAST_DIR/appcast.xml"
-    fi
-fi
-
-echo ""
-
-# ============================================
-# Step 5: Create GitHub Release
-# ============================================
-echo "=== Step 5: Creating GitHub Release ==="
+echo "=== Step 4: Creating GitHub Release ==="
 
 if ! command -v gh &> /dev/null; then
     echo "WARNING: gh CLI not found. Install with: brew install gh"
@@ -235,20 +170,11 @@ fi
 echo ""
 
 # ============================================
-# Step 6: Update website appcast and deploy
+# Step 5: Update website and deploy
 # ============================================
-echo "=== Step 6: Updating Website ==="
+echo "=== Step 5: Updating Website ==="
 
-if [ -d "$WEBSITE_PUBLIC" ] && [ -f "$RELEASE_DIR/appcast/appcast.xml" ]; then
-    # Copy appcast to website
-    cp "$RELEASE_DIR/appcast/appcast.xml" "$WEBSITE_PUBLIC/appcast.xml"
-
-    # Update the download URL in appcast to point to GitHub releases
-    if [ -n "$GITHUB_DOWNLOAD_URL" ]; then
-        sed -i '' "s|url=\"[^\"]*$APP_NAME-$VERSION.dmg\"|url=\"$GITHUB_DOWNLOAD_URL\"|g" "$WEBSITE_PUBLIC/appcast.xml"
-        echo "Updated appcast.xml with GitHub download URL"
-    fi
-
+if [ -d "$WEBSITE_PUBLIC" ]; then
     # Update src/config.ts with latest version and download URL
     CONFIG_FILE="$WEBSITE_DIR/src/config.ts"
     if [ -n "$GITHUB_DOWNLOAD_URL" ]; then
@@ -263,10 +189,10 @@ EOF
     # Commit and push website changes
     cd "$WEBSITE_DIR"
     if [ -d ".git" ]; then
-        git add public/appcast.xml src/config.ts
+        git add src/config.ts
         if ! git diff --cached --quiet; then
-            git commit -m "Update appcast for v$VERSION"
-            echo "Committed appcast update"
+            git commit -m "Update version for v$VERSION"
+            echo "Committed version update"
 
             read -p "Push website changes to deploy? (Y/n) " -n 1 -r
             echo
@@ -279,14 +205,10 @@ EOF
         else
             echo "No changes to commit"
         fi
-    else
-        echo "Copied appcast.xml to $WEBSITE_PUBLIC/"
-        echo "Note: Website directory is not a git repo"
     fi
     cd "$PROJECT_DIR"
 else
-    echo "Website directory not found or appcast not generated"
-    echo "Skipping website update."
+    echo "Website directory not found. Skipping website update."
 fi
 
 echo ""
@@ -295,12 +217,6 @@ echo "=== Release Complete ==="
 echo ""
 echo "Files created:"
 echo "  - DMG: $DMG_PATH"
-if [ -f "$RELEASE_DIR/appcast/appcast.xml" ]; then
-    echo "  - Appcast: $RELEASE_DIR/appcast/appcast.xml"
-fi
 if [ -n "$GITHUB_DOWNLOAD_URL" ]; then
     echo "  - GitHub: https://github.com/$GITHUB_REPO/releases/tag/v$VERSION"
-fi
-if [ -f "$WEBSITE_PUBLIC/appcast.xml" ]; then
-    echo "  - Website: $WEBSITE_PUBLIC/appcast.xml"
 fi
