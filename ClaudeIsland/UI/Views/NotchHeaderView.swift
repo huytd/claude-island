@@ -13,10 +13,13 @@ struct ClaudeCrabIcon: View {
     let color: Color
     var animateLegs: Bool = false
 
-    @State private var legPhase: Int = 0
+    @State private var dancePhase: Int = 0
+    @State private var dropOffset: CGFloat = 0
+    @State private var wobbleAngle: CGFloat = 0
+    @State private var isDropping = true
 
-    // Timer for leg animation
-    private let legTimer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+    // Timer for dance animation
+    private let danceTimer = Timer.publish(every: 0.12, on: .main, in: .common).autoconnect()
 
     init(size: CGFloat = 16, color: Color = Color(red: 0.85, green: 0.47, blue: 0.34), animateLegs: Bool = false) {
         self.size = size
@@ -26,68 +29,121 @@ struct ClaudeCrabIcon: View {
 
     var body: some View {
         Canvas { context, canvasSize in
-            let scale = size / 52.0  // Original viewBox height is 52
+            let scale = size / 52.0
             let xOffset = (canvasSize.width - 66 * scale) / 2
+
+            // Dance transforms
+            let bounceY = dropOffset
+            let wobble = wobbleAngle
+
+            func makeTransform() -> CGAffineTransform {
+                let cx = 33.0  // center of the virtual grid (66/2)
+                let cy = 26.0  // center of the virtual grid (52/2)
+                // Order matters: last call = first applied to point.
+                // So the sequence bottom-up is: T(-cx,-cy) → R → S → T(canvas center + bounce)
+                // This rotates around (cx,cy) in virtual space, then scales to canvas coords.
+                return CGAffineTransform.identity
+                    .translatedBy(x: cx * scale + xOffset, y: cy * scale + bounceY * scale)
+                    .scaledBy(x: scale, y: scale)
+                    .rotated(by: wobble)
+                    .translatedBy(x: -cx, y: -cy)
+            }
+
+            let transform = makeTransform()
+
+            // Draw legs behind the body
+            let legXPositions: [CGFloat] = [6, 18, 42, 54]
+            let legY: CGFloat = 39
+            let baseLegHeight: CGFloat = 13
+
+            // Dance leg patterns — 8-phase kick cycle
+            let danceLegOffsets: [[CGFloat]] = [
+                [ 4, -4,  4, -4],   // 0: kick!
+                [ 2, -2,  2, -2],   // 1:
+                [ 0,  0,  0,  0],   // 2: feet together
+                [-4,  4, -4,  4],   // 3: kick opposite
+                [-2,  2, -2,  2],   // 4:
+                [ 0,  0,  0,  0],   // 5: together
+                [ 3,  3, -3, -3],   // 6: left legs up, right down
+                [-3, -3,  3,  3],   // 7: right legs up, left down
+            ]
+
+            let currentOffsets = animateLegs ? danceLegOffsets[dancePhase % 8] : [CGFloat](repeating: 0, count: 4)
+
+            for (index, xPos) in legXPositions.enumerated() {
+                let offset = currentOffsets[index]
+                let legHeight = baseLegHeight + offset
+                let leg = Path { p in
+                    p.addRect(CGRect(x: xPos, y: legY, width: 6, height: legHeight))
+                }.applying(transform)
+                context.fill(leg, with: .color(color))
+            }
+
+            // Main body
+            let crabBody = Path { p in
+                p.addRect(CGRect(x: 6, y: 0, width: 54, height: 39))
+            }.applying(transform)
+            context.fill(crabBody, with: .color(color))
 
             // Left antenna
             let leftAntenna = Path { p in
                 p.addRect(CGRect(x: 0, y: 13, width: 6, height: 13))
-            }.applying(CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: xOffset / scale, y: 0))
+            }.applying(transform)
             context.fill(leftAntenna, with: .color(color))
 
             // Right antenna
             let rightAntenna = Path { p in
                 p.addRect(CGRect(x: 60, y: 13, width: 6, height: 13))
-            }.applying(CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: xOffset / scale, y: 0))
+            }.applying(transform)
             context.fill(rightAntenna, with: .color(color))
 
-            // Animated legs - alternating up/down pattern for walking effect
-            // Legs stay attached to body (y=39), only height changes
-            let baseLegPositions: [CGFloat] = [6, 18, 42, 54]
-            let baseLegHeight: CGFloat = 13
-
-            // Height offsets: positive = longer leg (down), negative = shorter leg (up)
-            let legHeightOffsets: [[CGFloat]] = [
-                [3, -3, 3, -3],   // Phase 0: alternating
-                [0, 0, 0, 0],     // Phase 1: neutral
-                [-3, 3, -3, 3],   // Phase 2: alternating (opposite)
-                [0, 0, 0, 0],     // Phase 3: neutral
-            ]
-
-            let currentHeightOffsets = animateLegs ? legHeightOffsets[legPhase % 4] : [CGFloat](repeating: 0, count: 4)
-
-            for (index, xPos) in baseLegPositions.enumerated() {
-                let heightOffset = currentHeightOffsets[index]
-                let legHeight = baseLegHeight + heightOffset
-                let leg = Path { p in
-                    p.addRect(CGRect(x: xPos, y: 39, width: 6, height: legHeight))
-                }.applying(CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: xOffset / scale, y: 0))
-                context.fill(leg, with: .color(color))
-            }
-
-            // Main body
-            let body = Path { p in
-                p.addRect(CGRect(x: 6, y: 0, width: 54, height: 39))
-            }.applying(CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: xOffset / scale, y: 0))
-            context.fill(body, with: .color(color))
-
-            // Left eye
+            // Eyes with a little dance — eyes shift up slightly on beat
+            let eyeBounce: CGFloat = (!isDropping && animateLegs) ? (dancePhase % 2 == 0 ? -2 : 0) : 0
             let leftEye = Path { p in
-                p.addRect(CGRect(x: 12, y: 13, width: 6, height: 6.5))
-            }.applying(CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: xOffset / scale, y: 0))
+                p.addRect(CGRect(x: 12, y: 13.0 + eyeBounce, width: 6.0, height: 6.5))
+            }.applying(transform)
             context.fill(leftEye, with: .color(.black))
 
-            // Right eye
             let rightEye = Path { p in
-                p.addRect(CGRect(x: 48, y: 13, width: 6, height: 6.5))
-            }.applying(CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: xOffset / scale, y: 0))
+                p.addRect(CGRect(x: 48, y: 13.0 + eyeBounce, width: 6.0, height: 6.5))
+            }.applying(transform)
             context.fill(rightEye, with: .color(.black))
         }
         .frame(width: size * (66.0 / 52.0), height: size)
         .shadow(color: animateLegs ? color.opacity(0.8) : .clear, radius: 4, x: 0, y: 0)
-        .onReceive(legTimer) { _ in
+        .onReceive(danceTimer) { _ in
             if animateLegs {
-                legPhase = (legPhase + 1) % 4
+                dancePhase = (dancePhase + 1) % 8
+
+                if isDropping {
+                    // Drop-in bounce: above position → impact → settle
+                    let dropWave: [CGFloat] = [
+                        -30,  // fall from above
+                        -18,  // coming down fast
+                         -6,  // almost there
+                          3,  // impact - overshoot (squish)
+                         -1,  // bounce back slightly
+                          0,  // settled
+                    ]
+                    let phase = dancePhase % dropWave.count
+                    dropOffset = dropWave[phase]
+                    if phase == dropWave.count - 1 {
+                        isDropping = false
+                    }
+                } else {
+                    // Settled: continuous wobble
+                    let wobbleWave: [CGFloat] = [-0.08, -0.05, 0, 0.05, 0.08, 0.05, 0, -0.05]
+                    wobbleAngle = wobbleWave[dancePhase % wobbleWave.count]
+                    dropOffset = 0
+                }
+            } else {
+                // Reset for next drop
+                if !isDropping || dropOffset != 0 {
+                    dancePhase = 0
+                    dropOffset = 0
+                    wobbleAngle = 0
+                    isDropping = true
+                }
             }
         }
     }
