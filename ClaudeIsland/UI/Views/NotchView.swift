@@ -54,6 +54,11 @@ struct NotchView: View {
         }
     }
 
+    /// Whether any Claude session is waiting for a question/approval (turns crab purple)
+    private var isQuestionMode: Bool {
+        hasPendingPermission || hasWaitingForInput
+    }
+
     // MARK: - Sizing
 
     private var closedNotchSize: CGSize {
@@ -81,12 +86,12 @@ struct NotchView: View {
 
         // Expand for pending permissions (left indicator) or waiting for input (checkmark on right)
         if hasPendingPermission {
-            return 2 * max(0, closedNotchSize.height - 12) + 20 + permissionIndicatorWidth
+            return 2 * max(0, closedNotchSize.height - 12) + 50 + permissionIndicatorWidth
         }
 
         // Waiting for input just shows checkmark on right, no extra left indicator
         if hasWaitingForInput {
-            return 2 * max(0, closedNotchSize.height - 12) + 20
+            return 2 * max(0, closedNotchSize.height - 12) + 50
         }
 
         return 0
@@ -249,12 +254,12 @@ struct NotchView: View {
             // Left side - crab + optional permission indicator (visible when processing, pending, or waiting for input)
             if showClosedActivity {
                 HStack(spacing: 4) {
-                    ClaudeCrabIcon(size: 14, animateLegs: isProcessing)
+                    ClaudeCrabIcon(size: 14, color: hasPendingPermission ? Color(red: 0.72, green: 0.44, blue: 0.84) : Color(red: 0.85, green: 0.47, blue: 0.34), enableDancing: isProcessing, bounceOnly: isQuestionMode)
                         .matchedGeometryEffect(id: "crab", in: activityNamespace, isSource: showClosedActivity)
 
-                    // Permission indicator only (amber) - waiting for input shows checkmark on right
+                    // Permission indicator only - color changes based on mode
                     if hasPendingPermission {
-                        PermissionIndicatorIcon(size: 14, color: Color(red: 0.85, green: 0.47, blue: 0.34))
+                        PermissionIndicatorIcon(size: 14, color: hasPendingPermission ? Color(red: 0.72, green: 0.44, blue: 0.84) : Color(red: 0.85, green: 0.47, blue: 0.34))
                             .matchedGeometryEffect(id: "status-indicator", in: activityNamespace, isSource: showClosedActivity)
                     }
                 }
@@ -307,7 +312,7 @@ struct NotchView: View {
             // Show static crab only if not showing activity in headerRow
             // (headerRow handles crab + indicator when showClosedActivity is true)
             if !showClosedActivity {
-                ClaudeCrabIcon(size: 14)
+                ClaudeCrabIcon(size: 14, color: isQuestionMode ? Color(red: 0.72, green: 0.44, blue: 0.84) : Color(red: 0.85, green: 0.47, blue: 0.34), bounceOnly: isQuestionMode)
                     .matchedGeometryEffect(id: "crab", in: activityNamespace, isSource: !showClosedActivity)
                     .padding(.leading, 8)
             }

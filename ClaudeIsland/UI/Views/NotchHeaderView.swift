@@ -11,7 +11,8 @@ import SwiftUI
 struct ClaudeCrabIcon: View {
     let size: CGFloat
     let color: Color
-    var animateLegs: Bool = false
+    var enableDancing: Bool = false
+    var bounceOnly: Bool = false
 
     @State private var dancePhase: Int = 0
     @State private var dropOffset: CGFloat = 0
@@ -21,10 +22,16 @@ struct ClaudeCrabIcon: View {
     // Timer for dance animation
     private let danceTimer = Timer.publish(every: 0.12, on: .main, in: .common).autoconnect()
 
-    init(size: CGFloat = 16, color: Color = Color(red: 0.85, green: 0.47, blue: 0.34), animateLegs: Bool = false) {
+    /// Whether any animation is active (timer guard)
+    private var isAnimating: Bool {
+        enableDancing || bounceOnly
+    }
+
+    init(size: CGFloat = 16, color: Color = Color(red: 0.85, green: 0.47, blue: 0.34), enableDancing: Bool = false, bounceOnly: Bool = false) {
         self.size = size
         self.color = color
-        self.animateLegs = animateLegs
+        self.enableDancing = enableDancing
+        self.bounceOnly = bounceOnly
     }
 
     var body: some View {
@@ -68,7 +75,7 @@ struct ClaudeCrabIcon: View {
                 [-3, -3,  3,  3],   // 7: right legs up, left down
             ]
 
-            let currentOffsets = animateLegs ? danceLegOffsets[dancePhase % 8] : [CGFloat](repeating: 0, count: 4)
+            let currentOffsets = enableDancing ? danceLegOffsets[dancePhase % 8] : [CGFloat](repeating: 0, count: 4)
 
             for (index, xPos) in legXPositions.enumerated() {
                 let offset = currentOffsets[index]
@@ -98,7 +105,7 @@ struct ClaudeCrabIcon: View {
             context.fill(rightAntenna, with: .color(color))
 
             // Eyes with a little dance — eyes shift up slightly on beat
-            let eyeBounce: CGFloat = (!isDropping && animateLegs) ? (dancePhase % 2 == 0 ? -2 : 0) : 0
+            let eyeBounce: CGFloat = (!isDropping && enableDancing) ? (dancePhase % 2 == 0 ? -2 : 0) : 0
             let leftEye = Path { p in
                 p.addRect(CGRect(x: 12, y: 13.0 + eyeBounce, width: 6.0, height: 6.5))
             }.applying(transform)
@@ -110,9 +117,9 @@ struct ClaudeCrabIcon: View {
             context.fill(rightEye, with: .color(.black))
         }
         .frame(width: size * (66.0 / 52.0), height: size)
-        .shadow(color: animateLegs ? color.opacity(0.8) : .clear, radius: 4, x: 0, y: 0)
+        .shadow(color: (enableDancing || bounceOnly) ? color.opacity(0.8) : .clear, radius: 4, x: 0, y: 0)
         .onReceive(danceTimer) { _ in
-            if animateLegs {
+            if isAnimating {
                 dancePhase = (dancePhase + 1) % 8
 
                 if isDropping {
@@ -131,10 +138,18 @@ struct ClaudeCrabIcon: View {
                         isDropping = false
                     }
                 } else {
-                    // Settled: continuous wobble
-                    let wobbleWave: [CGFloat] = [-0.08, -0.05, 0, 0.05, 0.08, 0.05, 0, -0.05]
-                    wobbleAngle = wobbleWave[dancePhase % wobbleWave.count]
-                    dropOffset = 0
+                    if bounceOnly {
+                        // Bounce + stronger wobble
+                        let bounceWave: [CGFloat] = [-12, -6, 0, -6]
+                        dropOffset = bounceWave[dancePhase % bounceWave.count]
+                        let bounceWobbleWave: [CGFloat] = [-0.15, -0.08, 0.05, -0.08]
+                        wobbleAngle = bounceWobbleWave[dancePhase % bounceWobbleWave.count]
+                    } else {
+                        // Settled: continuous wobble
+                        let wobbleWave: [CGFloat] = [-0.08, -0.05, 0, 0.05, 0.08, 0.05, 0, -0.05]
+                        wobbleAngle = wobbleWave[dancePhase % wobbleWave.count]
+                        dropOffset = 0
+                    }
                 }
             } else {
                 // Reset for next drop
