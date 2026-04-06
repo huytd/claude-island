@@ -146,7 +146,13 @@ actor SessionStore {
 
         let newPhase = event.determinePhase()
 
-        if session.phase.canTransition(to: newPhase) {
+        // Don't let a Stop event override an active permission request.
+        // Subagent tools can fire PermissionRequest hooks that block the session,
+        // and a Stop event from the main session would otherwise wipe the permission state.
+        if event.event == "Stop" || event.event == "SubagentStop",
+           case .waitingForApproval = session.phase {
+            // Still process subagent tracking and other logic, just skip the phase change
+        } else if session.phase.canTransition(to: newPhase) {
             session.phase = newPhase
         } else {
             Self.logger.debug("Invalid transition: \(String(describing: session.phase), privacy: .public) -> \(String(describing: newPhase), privacy: .public), ignoring")
