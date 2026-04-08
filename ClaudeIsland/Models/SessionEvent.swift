@@ -78,6 +78,29 @@ enum SessionEvent: Sendable {
 
     /// History load completed
     case historyLoaded(sessionId: String, messages: [ChatMessage], completedTools: Set<String>, toolResults: [String: ConversationParser.ToolResult], structuredResults: [String: ToolResultData], conversationInfo: ConversationInfo)
+
+    // MARK: - OpenCode Events (from OpenCodeEventMonitor)
+
+    /// An OpenCode session was created or discovered
+    case opencodeSessionCreated(sessionId: String, projectPath: String, title: String?)
+
+    /// An OpenCode session's status changed
+    case opencodeSessionUpdated(sessionId: String, phase: SessionPhase)
+
+    /// An OpenCode tool call started
+    case opencodeToolStarted(sessionId: String, toolId: String, toolName: String, input: [String: String])
+
+    /// An OpenCode tool call completed
+    case opencodeToolCompleted(sessionId: String, toolId: String, status: ToolStatus, result: String?)
+
+    /// An OpenCode session received a new user or assistant message
+    case opencodeMessageAdded(sessionId: String, message: ChatMessage)
+
+    /// An OpenCode session requires permission approval
+    case opencodePermissionRequested(sessionId: String, requestId: String, permission: String, patterns: [String])
+
+    /// An OpenCode permission request was resolved (approved or denied externally)
+    case opencodePermissionResolved(sessionId: String, requestId: String)
 }
 
 /// Payload for file update events
@@ -220,6 +243,20 @@ extension SessionEvent: CustomStringConvertible {
             return "subagentStopped(session: \(sessionId.prefix(8)), task: \(taskToolId.prefix(12)))"
         case .agentFileUpdated(let sessionId, let taskToolId, let tools):
             return "agentFileUpdated(session: \(sessionId.prefix(8)), task: \(taskToolId.prefix(12)), tools: \(tools.count))"
+        case .opencodeSessionCreated(let sessionId, _, let title):
+            return "opencodeSessionCreated(session: \(sessionId.prefix(8)), title: \(title ?? "nil"))"
+        case .opencodeSessionUpdated(let sessionId, let phase):
+            return "opencodeSessionUpdated(session: \(sessionId.prefix(8)), phase: \(phase))"
+        case .opencodeToolStarted(let sessionId, let toolId, let toolName, _):
+            return "opencodeToolStarted(session: \(sessionId.prefix(8)), tool: \(toolId.prefix(12)), name: \(toolName))"
+        case .opencodeToolCompleted(let sessionId, let toolId, let status, _):
+            return "opencodeToolCompleted(session: \(sessionId.prefix(8)), tool: \(toolId.prefix(12)), status: \(status))"
+        case .opencodeMessageAdded(let sessionId, let message):
+            return "opencodeMessageAdded(session: \(sessionId.prefix(8)), role: \(message.role))"
+        case .opencodePermissionRequested(let sessionId, let requestId, let permission, _):
+            return "opencodePermissionRequested(session: \(sessionId.prefix(8)), request: \(requestId.prefix(12)), permission: \(permission))"
+        case .opencodePermissionResolved(let sessionId, let requestId):
+            return "opencodePermissionResolved(session: \(sessionId.prefix(8)), request: \(requestId.prefix(12)))"
         }
     }
 }

@@ -31,6 +31,11 @@ class ClaudeSessionMonitor: ObservableObject {
     // MARK: - Monitoring Lifecycle
 
     func startMonitoring() {
+        // Start OpenCode SSE monitor (runs independently in background)
+        Task {
+            await OpenCodeEventMonitor.shared.start()
+        }
+
         HookSocketServer.shared.start(
             onEvent: { event in
                 Task {
@@ -72,6 +77,9 @@ class ClaudeSessionMonitor: ObservableObject {
 
     func stopMonitoring() {
         HookSocketServer.shared.stop()
+        Task {
+            await OpenCodeEventMonitor.shared.stop()
+        }
     }
 
     // MARK: - Permission Handling
@@ -132,6 +140,50 @@ class ClaudeSessionMonitor: ObservableObject {
             await SessionStore.shared.process(
                 .permissionDenied(sessionId: sessionId, toolUseId: permission.toolUseId, reason: reason)
             )
+        }
+    }
+
+    // MARK: - OpenCode Permission Handling
+
+    func approveOpenCodePermission(sessionId: String) {
+        Task {
+            guard let session = await SessionStore.shared.session(for: sessionId),
+                  let permission = session.activePermission else { return }
+            await OpenCodeEventMonitor.shared.respondToPermission(
+                requestId: permission.toolUseId,
+                reply: .once
+            )
+            await SessionStore.shared.process(.opencodePermissionResolved(
+                sessionId: sessionId, requestId: permission.toolUseId
+            ))
+        }
+    }
+
+    func approveOpenCodePermissionAlways(sessionId: String) {
+        Task {
+            guard let session = await SessionStore.shared.session(for: sessionId),
+                  let permission = session.activePermission else { return }
+            await OpenCodeEventMonitor.shared.respondToPermission(
+                requestId: permission.toolUseId,
+                reply: .always
+            )
+            await SessionStore.shared.process(.opencodePermissionResolved(
+                sessionId: sessionId, requestId: permission.toolUseId
+            ))
+        }
+    }
+
+    func denyOpenCodePermission(sessionId: String) {
+        Task {
+            guard let session = await SessionStore.shared.session(for: sessionId),
+                  let permission = session.activePermission else { return }
+            await OpenCodeEventMonitor.shared.respondToPermission(
+                requestId: permission.toolUseId,
+                reply: .reject
+            )
+            await SessionStore.shared.process(.opencodePermissionResolved(
+                sessionId: sessionId, requestId: permission.toolUseId
+            ))
         }
     }
 

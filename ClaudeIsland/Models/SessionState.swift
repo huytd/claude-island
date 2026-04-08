@@ -8,6 +8,12 @@
 
 import Foundation
 
+/// The originating AI coding tool for a session
+enum SessionSource: String, Sendable, Equatable {
+    case claude
+    case opencode
+}
+
 /// Complete state for a single Claude session
 /// This is the single source of truth - all state reads and writes go through SessionStore
 struct SessionState: Equatable, Identifiable, Sendable {
@@ -16,6 +22,9 @@ struct SessionState: Equatable, Identifiable, Sendable {
     let sessionId: String
     let cwd: String
     let projectName: String
+
+    /// Which AI coding tool produced this session
+    let source: SessionSource
 
     // MARK: - Instance Metadata
 
@@ -69,6 +78,7 @@ struct SessionState: Equatable, Identifiable, Sendable {
         sessionId: String,
         cwd: String,
         projectName: String? = nil,
+        source: SessionSource = .claude,
         pid: Int? = nil,
         tty: String? = nil,
         isInTmux: Bool = false,
@@ -88,6 +98,7 @@ struct SessionState: Equatable, Identifiable, Sendable {
         self.sessionId = sessionId
         self.cwd = cwd
         self.projectName = projectName ?? URL(fileURLWithPath: cwd).lastPathComponent
+        self.source = source
         self.pid = pid
         self.tty = tty
         self.isInTmux = isInTmux
