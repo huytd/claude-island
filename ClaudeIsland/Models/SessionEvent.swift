@@ -79,7 +79,7 @@ enum SessionEvent: Sendable {
     /// History load completed
     case historyLoaded(sessionId: String, messages: [ChatMessage], completedTools: Set<String>, toolResults: [String: ConversationParser.ToolResult], structuredResults: [String: ToolResultData], conversationInfo: ConversationInfo)
 
-    // MARK: - OpenCode Events (from OpenCodeEventMonitor)
+    // MARK: - OpenCode Events (from OpenCodeSocketServer / plugin)
 
     /// An OpenCode session was created or discovered
     case opencodeSessionCreated(sessionId: String, projectPath: String, title: String?)
