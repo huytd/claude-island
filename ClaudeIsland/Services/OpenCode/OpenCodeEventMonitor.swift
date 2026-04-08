@@ -136,8 +136,17 @@ actor OpenCodeEventMonitor {
     // MARK: - Server Discovery
 
     private func discoverServer() async -> URL? {
+        // 1. Check OPENCODE_API_URL environment variable (explicit override)
+        if let envURL = ProcessInfo.processInfo.environment["OPENCODE_API_URL"],
+           let url = URL(string: envURL),
+           await isOpenCodeServer(at: url) {
+            logger.info("OpenCode server found via OPENCODE_API_URL: \(envURL, privacy: .public)")
+            return url
+        }
+
+        // 2. Probe default port 4096 and nearby ports
         for port in Self.discoveryPorts {
-            let candidate = URL(string: "http://localhost:\(port)")!
+            let candidate = URL(string: "http://127.0.0.1:\(port)")!
             if await isOpenCodeServer(at: candidate) {
                 logger.info("OpenCode server found at port \(port, privacy: .public)")
                 return candidate
@@ -277,15 +286,36 @@ actor OpenCodeEventMonitor {
         case "session.updated":
             guard let sessionId = event["sessionID"] as? String else { break }
             let info = event["info"] as? [String: Any]
-            let status = info?["status"] as? String ?? "idle"
+            let status = info?["status"] as? String ?? (event["status"] as? String ?? "idle")
             let phase = mapStatus(status)
             await SessionStore.shared.process(.opencodeSessionUpdated(sessionId: sessionId, phase: phase))
+
+        case "session.status":
+            // Dedicated status-change event
+            guard let sessionId = event["sessionID"] as? String else { break }
+            let status = event["status"] as? String ?? "idle"
+            await SessionStore.shared.process(.opencodeSessionUpdated(
+                sessionId: sessionId, phase: mapStatus(status)
+            ))
+
+        case "session.idle":
+            guard let sessionId = event["sessionID"] as? String else { break }
+            await SessionStore.shared.process(.opencodeSessionUpdated(
+                sessionId: sessionId, phase: .waitingForInput
+            ))
+
+        case "session.compacted":
+            guard let sessionId = event["sessionID"] as? String else { break }
+            await SessionStore.shared.process(.opencodeSessionUpdated(
+                sessionId: sessionId, phase: .compacting
+            ))
 
         case "session.deleted":
             guard let sessionId = event["sessionID"] as? String else { break }
             await SessionStore.shared.process(.sessionEnded(sessionId: sessionId))
 
-        case "permission.asked":
+        case "permission.updated":
+            // permission.updated carries the full permission request object
             guard let requestId = event["id"] as? String,
                   let sessionId = event["sessionID"] as? String
             else { break }
@@ -304,7 +334,7 @@ actor OpenCodeEventMonitor {
             ))
 
         default:
-            // Check for message events (e.g. "message.updated", "message.part.updated")
+            // Handle message events (message.updated, message.part.updated, etc.)
             if event.type.hasPrefix("message") {
                 await handleMessageEvent(event)
             }
@@ -374,15 +404,16 @@ actor OpenCodeEventMonitor {
 
     // MARK: - Helpers
 
-    /// Map an OpenCode session status string to a SessionPhase
+    /// Map an OpenCode session status string to a SessionPhase.
+    /// Status values: "idle", "running", "streaming", "busy", "archived", "unknown"
     private func mapStatus(_ status: String) -> SessionPhase {
         switch status {
-        case "idle", "completed":
+        case "idle":
             return .waitingForInput
-        case "running", "generating", "busy":
+        case "running", "streaming", "busy":
             return .processing
-        case "error":
-            return .idle
+        case "archived":
+            return .ended
         default:
             return .idle
         }
