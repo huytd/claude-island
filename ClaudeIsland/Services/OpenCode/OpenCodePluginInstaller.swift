@@ -94,16 +94,9 @@ struct OpenCodePluginInstaller {
     // MARK: - Helpers
 
     private static func openCodeConfigDir() -> URL {
-        // XDG_CONFIG_HOME or ~/.config
-        let base: URL
-        if let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"],
-           !xdg.isEmpty {
-            base = URL(fileURLWithPath: xdg)
-        } else {
-            base = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".config")
-        }
-        return base.appendingPathComponent("opencode")
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config")
+            .appendingPathComponent("opencode")
     }
 
     private static func readConfig(at url: URL) -> [String: Any] {
