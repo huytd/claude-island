@@ -110,6 +110,29 @@ actor SessionStore {
         case .agentFileUpdated:
             // No longer used - subagent tools are populated from JSONL completion
             break
+
+        // MARK: - OpenCode Events
+
+        case .opencodeSessionCreated(let sessionId, let projectPath, let title):
+            processOpenCodeSessionCreated(sessionId: sessionId, projectPath: projectPath, title: title)
+
+        case .opencodeSessionUpdated(let sessionId, let phase):
+            processOpenCodeSessionUpdated(sessionId: sessionId, phase: phase)
+
+        case .opencodeToolStarted(let sessionId, let toolId, let toolName, let input):
+            processOpenCodeToolStarted(sessionId: sessionId, toolId: toolId, toolName: toolName, input: input)
+
+        case .opencodeToolCompleted(let sessionId, let toolId, let status, let result):
+            processOpenCodeToolCompleted(sessionId: sessionId, toolId: toolId, status: status, result: result)
+
+        case .opencodeMessageAdded(let sessionId, let message):
+            processOpenCodeMessageAdded(sessionId: sessionId, message: message)
+
+        case .opencodePermissionRequested(let sessionId, let requestId, let permission, let patterns):
+            processOpenCodePermissionRequested(sessionId: sessionId, requestId: requestId, permission: permission, patterns: patterns)
+
+        case .opencodePermissionResolved(let sessionId, let requestId):
+            processOpenCodePermissionResolved(sessionId: sessionId, requestId: requestId)
         }
 
         publishState()
@@ -1008,5 +1031,137 @@ actor SessionStore {
     /// Get all current sessions
     func allSessions() -> [SessionState] {
         Array(sessions.values)
+    }
+
+    // MARK: - OpenCode Event Processing
+
+    private func processOpenCodeSessionCreated(sessionId: String, projectPath: String, title: String?) {
+        guard sessions[sessionId] == nil else { return }  // Already known
+        let session = SessionState(
+            sessionId: sessionId,
+            cwd: projectPath,
+            projectName: title ?? URL(fileURLWithPath: projectPath).lastPathComponent,
+            source: .opencode,
+            phase: .idle
+        )
+        sessions[sessionId] = session
+        Self.logger.info("OpenCode session created: \(sessionId.prefix(8), privacy: .public) @ \(projectPath, privacy: .public)")
+    }
+
+    private func processOpenCodeSessionUpdated(sessionId: String, phase: SessionPhase) {
+        guard var session = sessions[sessionId] else { return }
+        if session.phase.canTransition(to: phase) {
+            session.phase = phase
+        }
+        session.lastActivity = Date()
+        sessions[sessionId] = session
+    }
+
+    private func processOpenCodeToolStarted(sessionId: String, toolId: String, toolName: String, input: [String: String]) {
+        guard var session = sessions[sessionId] else { return }
+        guard !session.toolTracker.hasSeen(toolId) else { return }
+        session.toolTracker.startTool(id: toolId, name: toolName)
+
+        let item = ChatHistoryItem(
+            id: toolId,
+            type: .toolCall(ToolCallItem(
+                name: toolName,
+                input: input,
+                status: .running,
+                result: nil,
+                structuredResult: nil,
+                subagentTools: []
+            )),
+            timestamp: Date()
+        )
+        session.chatItems.append(item)
+        session.lastActivity = Date()
+        sessions[sessionId] = session
+    }
+
+    private func processOpenCodeToolCompleted(sessionId: String, toolId: String, status: ToolStatus, result: String?) {
+        guard var session = sessions[sessionId] else { return }
+        session.toolTracker.completeTool(id: toolId, success: status == .success)
+        for i in 0..<session.chatItems.count {
+            if session.chatItems[i].id == toolId,
+               case .toolCall(var tool) = session.chatItems[i].type {
+                tool.status = status
+                tool.result = result
+                session.chatItems[i] = ChatHistoryItem(
+                    id: toolId,
+                    type: .toolCall(tool),
+                    timestamp: session.chatItems[i].timestamp
+                )
+                break
+            }
+        }
+        session.lastActivity = Date()
+        sessions[sessionId] = session
+    }
+
+    private func processOpenCodeMessageAdded(sessionId: String, message: ChatMessage) {
+        guard var session = sessions[sessionId] else { return }
+        let messageId = message.id
+        guard !session.chatItems.contains(where: { $0.id.hasPrefix(messageId) }) else { return }
+
+        for (blockIndex, block) in message.content.enumerated() {
+            switch block {
+            case .text(let text):
+                let itemId = "\(messageId)-text-\(blockIndex)"
+                let itemType: ChatHistoryItemType = message.role == .user ? .user(text) : .assistant(text)
+                session.chatItems.append(ChatHistoryItem(id: itemId, type: itemType, timestamp: message.timestamp))
+            case .toolUse, .thinking, .interrupted:
+                break  // Tool calls handled by opencodeToolStarted/Completed events
+            }
+        }
+
+        // Update conversation info from user messages
+        if message.role == .user {
+            var firstText: String?
+            for block in message.content {
+                if case .text(let t) = block { firstText = t; break }
+            }
+            if let text = firstText {
+                let existing = session.conversationInfo
+                session.conversationInfo = ConversationInfo(
+                    summary: existing.summary,
+                    lastMessage: text,
+                    lastMessageRole: "user",
+                    lastToolName: existing.lastToolName,
+                    firstUserMessage: existing.firstUserMessage ?? text,
+                    lastUserMessageDate: message.timestamp
+                )
+            }
+        }
+
+        session.lastActivity = Date()
+        sessions[sessionId] = session
+    }
+
+    private func processOpenCodePermissionRequested(sessionId: String, requestId: String, permission: String, patterns: [String]) {
+        guard var session = sessions[sessionId] else { return }
+        let input: [String: AnyCodable] = patterns.isEmpty ? [:] : ["patterns": AnyCodable(patterns.joined(separator: ", "))]
+        let ctx = PermissionContext(
+            toolUseId: requestId,
+            toolName: permission,
+            toolInput: input,
+            receivedAt: Date()
+        )
+        if session.phase.canTransition(to: .waitingForApproval(ctx)) {
+            session.phase = .waitingForApproval(ctx)
+        }
+        session.lastActivity = Date()
+        sessions[sessionId] = session
+    }
+
+    private func processOpenCodePermissionResolved(sessionId: String, requestId: String) {
+        guard var session = sessions[sessionId] else { return }
+        if case .waitingForApproval(let ctx) = session.phase, ctx.toolUseId == requestId {
+            if session.phase.canTransition(to: .processing) {
+                session.phase = .processing
+            }
+        }
+        session.lastActivity = Date()
+        sessions[sessionId] = session
     }
 }

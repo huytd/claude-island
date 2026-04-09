@@ -28,7 +28,7 @@ struct ClaudeInstancesView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white.opacity(0.4))
 
-            Text("Run claude in terminal")
+            Text("Run claude or opencode in terminal")
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.25))
         }
@@ -104,15 +104,27 @@ struct ClaudeInstancesView: View {
     }
 
     private func approveSession(_ session: SessionState) {
-        sessionMonitor.approvePermission(sessionId: session.sessionId)
+        if session.source == .opencode {
+            sessionMonitor.approveOpenCodePermission(sessionId: session.sessionId)
+        } else {
+            sessionMonitor.approvePermission(sessionId: session.sessionId)
+        }
     }
 
     private func approveAlwaysSession(_ session: SessionState) {
-        sessionMonitor.approvePermissionAlways(sessionId: session.sessionId)
+        if session.source == .opencode {
+            sessionMonitor.approveOpenCodePermissionAlways(sessionId: session.sessionId)
+        } else {
+            sessionMonitor.approvePermissionAlways(sessionId: session.sessionId)
+        }
     }
 
     private func rejectSession(_ session: SessionState) {
-        sessionMonitor.denyPermission(sessionId: session.sessionId, reason: nil)
+        if session.source == .opencode {
+            sessionMonitor.denyOpenCodePermission(sessionId: session.sessionId)
+        } else {
+            sessionMonitor.denyPermission(sessionId: session.sessionId, reason: nil)
+        }
     }
 
     private func archiveSession(_ session: SessionState) {
@@ -180,6 +192,19 @@ struct InstanceRow: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white)
                         .lineLimit(1)
+
+                    // OpenCode source badge
+                    if session.source == .opencode {
+                        Text("opencode")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(Color(red: 0.25, green: 0.75, blue: 0.55))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                Capsule()
+                                    .fill(Color(red: 0.25, green: 0.75, blue: 0.55).opacity(0.15))
+                            )
+                    }
 
                     // Token usage indicator
                     if session.usage.totalTokens > 0 {
